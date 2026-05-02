@@ -1,0 +1,498 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  owner
+  admin
+  accountant
+  viewer
+}
+
+model User {
+  id                 String      @id @default(uuid())
+  firstName          String
+  lastName           String
+  username           String      @unique
+  email              String      @unique
+  password           String
+  role               UserRole    @default(viewer)
+  mustChangePassword Boolean     @default(false)
+  sessions           Session[]
+  ownedCompany       CompanyInfo?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model CompanyInfo {
+  id                                 String  @id @default("singleton")
+  companyName                        String?
+  companyAddress                     String?
+  companyCountry                     String?
+  companyCity                        String?
+  companyProvince                    String?
+  companyZip                         String?
+  companyPhone                       String?
+  companyEmail                       String?
+  companyTin                         String?
+  currency                           String  @default("PHP")
+  fiscalYearStart                    Int     @default(1) // month number (1 = January)
+  accountingAccessTokenMinutes       Int     @default(15)
+  accountingRefreshTokenDays         Int     @default(7)
+  payrollSalaryExpenseAccountId      String?
+  payrollSssExpenseAccountId         String?
+  payrollPhilhealthExpenseAccountId  String?
+  payrollPagibigExpenseAccountId     String?
+  payrollSssPayableAccountId         String?
+  payrollPhilhealthPayableAccountId  String?
+  payrollPagibigPayableAccountId     String?
+  payrollWithholdingTaxPayableAccountId String?
+  payrollCashAccountId               String?
+  ownerId                            String? @unique
+  owner                              User?   @relation(fields: [ownerId], references: [id])
+  updatedAt       DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// CHART OF ACCOUNTS
+// ─────────────────────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum SystemTag {
+  ACCOUNTS_RECEIVABLE
+  ACCOUNTS_PAYABLE
+  CASH
+  DEFAULT_REVENUE
+  TAX_LIABILITY
+}
+
+model Account {
+  id          String      @id @default(uuid())
+  code        String      @unique
+  name        String
+  type        AccountType
+  subtype     String?     // e.g. "Cash", "Accounts Receivable", "Fixed Asset"
+  systemTag   SystemTag?  @unique // marks this account as a system-reserved role
+  description String?
+  parentId    String?
+  parent      Account?    @relation("subaccounts", fields: [parentId], references: [id])
+  children    Account[]   @relation("subaccounts")
+  isActive    Boolean     @default(true)
+
+  journalLines    JournalLine[]
+  bankAccounts    BankAccount[]
+  invoiceItems    InvoiceItem[]
+  billItems       BillItem[]
+  expenses        Expense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([parentId])
+}
+
+// ─────────────────────────────────────────────
+// CONTACTS (Customers & Vendors)
+// ─────────────────────────────────────────────
+
+enum ContactType {
+  CUSTOMER
+  VENDOR
+  BOTH
+}
+
+model Contact {
+  id       String      @id @default(uuid())
+  type     ContactType
+  name     String
+  email    String?
+  phone    String?
+  address  Json?
+  taxId    String?
+  isActive Boolean     @default(true)
+
+  invoices      Invoice[]
+  bills         Bill[]
+  expenses      Expense[]
+  checkVouchers CheckVoucher[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+}
+
+// ─────────────────────────────────────────────
+// SALES — Invoices & Accounts Receivable
+// ─────────────────────────────────────────────
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  customerId    String
+  customer      Contact       @relation(fields: [customerId], references: [id])
+  issueDate     DateTime
+  dueDate       DateTime
+  status        InvoiceStatus @default(DRAFT)
+  subtotal      Float
+  taxRate       Int
+  taxAmount     Float         @default(0)
+  discount      Float         @default(0)
+  total         Float
+  amountPaid    Float         @default(0)
+  balanceDue    Float
+  notes         String?
+  terms         String?
+
+  items          InvoiceItem[]
+  payments       Payment[]
+  journalEntryId String?
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  unitPrice   Float
+  amount      Float
+  accountId   String? // revenue account
+  account     Account? @relation(fields: [accountId], references: [id])
+
+  @@index([invoiceId])
+}
+
+// ─────────────────────────────────────────────
+// PURCHASES — Bills & Accounts Payable
+// ─────────────────────────────────────────────
+
+enum BillStatus {
+  DRAFT
+  RECEIVED
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model Bill {
+  id         String     @id @default(uuid())
+  billNumber String     @unique
+  vendorId   String
+  vendor     Contact    @relation(fields: [vendorId], references: [id])
+  issueDate  DateTime
+  dueDate    DateTime
+  status     BillStatus @default(DRAFT)
+  category   String?
+  subtotal   Float
+  taxAmount  Float      @default(0)
+  total      Float
+  amountPaid Float      @default(0)
+  balanceDue Float
+  notes      String?
+
+  items          BillItem[]
+  payments       Payment[]
+  checkVouchers  CheckVoucher[]
+  journalEntryId String?
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vendorId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model BillItem {
+  id          String  @id @default(uuid())
+  billId      String
+  bill        Bill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  unitPrice   Float
+  amount      Float
+  accountId   String? // expense account
+  account     Account? @relation(fields: [accountId], references: [id])
+
+  @@index([billId])
+}
+
+// ─────────────────────────────────────────────
+// PURCHASES — Expenses
+// ─────────────────────────────────────────────
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  POSTED
+}
+
+model Expense {
+  id            String        @id @default(uuid())
+  expenseNumber String        @unique
+  vendorId      String?
+  vendor        Contact?      @relation(fields: [vendorId], references: [id])
+  date          DateTime
+  category      String
+  description   String
+  amount        Float
+  taxAmount     Float         @default(0)
+  accountId     String
+  account       Account       @relation(fields: [accountId], references: [id])
+  bankAccountId String?
+  bankAccount   BankAccount?  @relation(fields: [bankAccountId], references: [id])
+  status        ExpenseStatus @default(PENDING)
+  approvedBy    String?
+  attachments   Json?
+
+  journalEntryId String?
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([status])
+  @@index([accountId])
+}
+
+// ─────────────────────────────────────────────
+// PURCHASES — Check Voucher
+// ─────────────────────────────────────────────
+
+enum VoucherStatus {
+  DRAFT
+  APPROVED
+  ISSUED
+  CLEARED
+  VOIDED
+}
+
+model CheckVoucher {
+  id            String        @id @default(uuid())
+  voucherNumber String        @unique
+  vendorId      String?
+  vendor        Contact?      @relation(fields: [vendorId], references: [id])
+  billId        String?
+  bill          Bill?         @relation(fields: [billId], references: [id])
+  date          DateTime
+  checkNumber   String?
+  bankAccountId String
+  bankAccount   BankAccount   @relation(fields: [bankAccountId], references: [id])
+  payee         String
+  amount        Float
+  purpose       String
+  status        VoucherStatus @default(DRAFT)
+  approvedBy    String?
+
+  journalEntryId String?
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([status])
+  @@index([bankAccountId])
+}
+
+// ─────────────────────────────────────────────
+// SHARED — Payments
+// ─────────────────────────────────────────────
+
+model Payment {
+  id            String       @id @default(uuid())
+  invoiceId     String?
+  invoice       Invoice?     @relation(fields: [invoiceId], references: [id])
+  billId        String?
+  bill          Bill?        @relation(fields: [billId], references: [id])
+  date          DateTime
+  amount        Float
+  method        String       // cash | check | bank-transfer | online
+  reference     String?
+  bankAccountId String?
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id])
+  notes         String?
+
+  journalEntryId String?
+  journalEntry   JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([billId])
+  @@index([date])
+}
+
+// ─────────────────────────────────────────────
+// ACCOUNTING — Journal Entries & General Ledger
+// ─────────────────────────────────────────────
+
+enum JournalStatus {
+  DRAFT
+  POSTED
+  REVERSED
+}
+
+model JournalEntry {
+  id          String        @id @default(uuid())
+  entryNumber String        @unique
+  date        DateTime
+  description String
+  status      JournalStatus @default(DRAFT)
+  reference   String?       // source doc ref
+  type        String?       // INVOICE | BILL | PAYMENT | EXPENSE | VOUCHER | MANUAL
+
+  lines         JournalLine[]
+  invoices      Invoice[]
+  bills         Bill[]
+  payments      Payment[]
+  expenses      Expense[]
+  checkVouchers CheckVoucher[]
+
+  createdBy String
+  postedBy  String?
+  postedAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+  @@index([status])
+  @@index([type])
+}
+
+model JournalLine {
+  id             String       @id @default(uuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  description    String?
+  debit          Float        @default(0)
+  credit         Float        @default(0)
+
+  @@index([journalEntryId])
+  @@index([accountId])
+}
+
+// ─────────────────────────────────────────────
+// ACCOUNTING — Bank Reconciliation
+// ─────────────────────────────────────────────
+
+model BankAccount {
+  id             String  @id @default(uuid())
+  name           String
+  bankName       String
+  accountNumber  String
+  accountId      String  // links to Chart of Accounts
+  account        Account @relation(fields: [accountId], references: [id])
+  currency       String  @default("PHP")
+  openingBalance Float   @default(0)
+  isActive       Boolean @default(true)
+
+  transactions    BankTransaction[]
+  reconciliations BankReconciliation[]
+  payments        Payment[]
+  expenses        Expense[]
+  checkVouchers   CheckVoucher[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model BankTransaction {
+  id               String              @id @default(uuid())
+  bankAccountId    String
+  bankAccount      BankAccount         @relation(fields: [bankAccountId], references: [id])
+  date             DateTime
+  description      String
+  amount           Float               // positive = deposit, negative = withdrawal
+  type             String              // DEPOSIT | WITHDRAWAL | TRANSFER
+  reference        String?
+  isReconciled     Boolean             @default(false)
+  reconciliationId String?
+  reconciliation   BankReconciliation? @relation(fields: [reconciliationId], references: [id])
+  createdAt        DateTime            @default(now())
+
+  @@index([bankAccountId])
+  @@index([date])
+  @@index([isReconciled])
+}
+
+enum ReconciliationStatus {
+  IN_PROGRESS
+  COMPLETED
+  REVIEWED
+}
+
+model BankReconciliation {
+  id               String               @id @default(uuid())
+  bankAccountId    String
+  bankAccount      BankAccount          @relation(fields: [bankAccountId], references: [id])
+  statementDate    DateTime
+  statementBalance Float
+  bookBalance      Float
+  adjustedBalance  Float
+  status           ReconciliationStatus @default(IN_PROGRESS)
+  transactions     BankTransaction[]
+  createdBy        String
+  completedAt      DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([bankAccountId])
+  @@index([status])
+}

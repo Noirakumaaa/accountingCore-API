@@ -1,0 +1,78 @@
+import 'dotenv/config';
+import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { AppModule } from './app.module.js';
+import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware.js';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
+
+const getRequiredEnv = (name: string): string => {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+};
+
+function parseOrigins(raw?: string): string[] {
+  if (!raw?.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter(
+        (origin): origin is string => typeof origin === 'string',
+      );
+    }
+    return typeof parsed === 'string' ? [parsed] : [];
+  } catch {
+    return raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+}
+
+const allowedOrigins: string[] = [
+  ...parseOrigins(process.env.CORS_ORIGIN),
+  process.env.FRONTEND_URL,
+  'https://democore.nathdomain.com',
+  'http://localhost:7000',
+].filter((o): o is string => Boolean(o));
+
+async function bootstrap() {
+  getRequiredEnv('DATABASE_URL');
+  getRequiredEnv('JWT_SECRET');
+  getRequiredEnv('JWT_REFRESH_SECRET');
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  app.use(helmet());
+  app.use(cookieParser());
+  app.use(RequestLoggerMiddleware);
+
+  app.enableCors({
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  });
+
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('SolveCore API')
+      .setDescription('Payroll & HR management API')
+      .setVersion('1.0')
+      .addCookieAuth('access_token')
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
+
+  await app.listen(process.env.PORT ?? 9001);
+}
+void bootstrap();
