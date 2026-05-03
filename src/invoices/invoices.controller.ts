@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { InvoicesService } from './invoices.service.js';
 import { CreateInvoiceDto } from './dto/create-invoice.dto.js';
+import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto.js';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
@@ -43,6 +44,15 @@ export class InvoicesController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateInvoiceDto: UpdateInvoiceDto) {
     return this.invoicesService.update(id, updateInvoiceDto);
+  }
+
+  @Post(':id/payments')
+  createPayment(
+    @Param('id') id: string,
+    @Body() dto: CreateInvoicePaymentDto,
+    @CurrentUser() user: AccessUser,
+  ) {
+    return this.invoicesService.recordPayment(id, dto, user.id);
   }
 
   @Delete(':id')

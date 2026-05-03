@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { BillsService } from './bills.service.js';
 import { CreateBillDto } from './dto/create-bill.dto.js';
+import { CreateBillPaymentDto } from './dto/create-bill-payment.dto.js';
 import { UpdateBillDto } from './dto/update-bill.dto.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../auth/guards/roles.guard.js';
@@ -40,6 +41,15 @@ export class BillsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateBillDto) {
     return this.billsService.update(id, dto);
+  }
+
+  @Post(':id/payments')
+  createPayment(
+    @Param('id') id: string,
+    @Body() dto: CreateBillPaymentDto,
+    @CurrentUser() user: AccessUser,
+  ) {
+    return this.billsService.recordPayment(id, dto, user.id);
   }
 
   @Delete(':id')

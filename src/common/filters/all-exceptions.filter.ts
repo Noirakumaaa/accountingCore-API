@@ -93,17 +93,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
         'The database is currently unavailable. Please try again later.';
     }
 
-    if (status >= 500) {
+    const numericStatus = Number(status);
+
+    if (numericStatus >= 500) {
       this.logger.error(
-        `${req.method} ${req.url} → ${status}`,
+        `${req.method} ${req.url} → ${numericStatus}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
-    } else if (status >= 400) {
-      this.logger.warn(`${req.method} ${req.url} → ${status}: ${message}`);
+    } else if (numericStatus >= 400) {
+      this.logger.warn(
+        `${req.method} ${req.url} → ${numericStatus}: ${message}`,
+      );
     }
 
-    res.status(status).json({
-      statusCode: status,
+    res.status(numericStatus).json({
+      statusCode: numericStatus,
       message,
       timestamp: new Date().toISOString(),
       path: req.url,

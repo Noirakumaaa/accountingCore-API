@@ -13,6 +13,9 @@ import { ContactsModule } from './contacts/contacts.module.js';
 import { JournalEntriesModule } from './journal-entries/journal-entries.module.js';
 import { DevToolsModule } from './dev-tools/dev-tools.module.js';
 import { AccountingSettingsModule } from './accounting-settings/accounting-settings.module.js';
+import { ExpensesModule } from './expenses/expenses.module.js';
+import { CheckVouchersModule } from './check-vouchers/check-vouchers.module.js';
+import { BankAccountsModule } from './bank-accounts/bank-accounts.module.js';
 
 @Module({
   imports: [
@@ -31,6 +34,9 @@ import { AccountingSettingsModule } from './accounting-settings/accounting-setti
     ContactsModule,
     JournalEntriesModule,
     AccountingSettingsModule,
+    ExpensesModule,
+    CheckVouchersModule,
+    BankAccountsModule,
     DevToolsModule,
   ],
   controllers: [AppController],
