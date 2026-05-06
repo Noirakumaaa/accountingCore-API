@@ -38,7 +38,8 @@ function parseOrigins(raw?: string): string[] {
 const allowedOrigins: string[] = [
   ...parseOrigins(process.env.CORS_ORIGIN),
   process.env.FRONTEND_URL,
-  'https://democore.nathdomain.com',
+  'https://solvercore.solverous.com',
+  'https://solvecore.solverous.com',
   'http://localhost:7000',
 ].filter((o): o is string => Boolean(o));
 
