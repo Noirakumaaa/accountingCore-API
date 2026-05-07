@@ -8,7 +8,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware.js';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { isProductionMode } from './config/runtime-env.js';
+import { isLocalUrl, isProductionMode } from './config/runtime-env.js';
 
 const getRequiredEnv = (name: string): string => {
   const value = process.env[name]?.trim();
@@ -36,13 +36,43 @@ function parseOrigins(raw?: string): string[] {
   }
 }
 
-const allowedOrigins: string[] = [
-  ...parseOrigins(process.env.CORS_ORIGIN),
-  process.env.FRONTEND_URL,
-  'https://solvercore.solverous.com',
-  'https://solvecore.solverous.com',
-  'http://localhost:7000',
-].filter((o): o is string => Boolean(o));
+const allowedOrigins = new Set(
+  [
+    ...parseOrigins(process.env.CORS_ORIGIN),
+    process.env.FRONTEND_URL,
+    'https://solvercore.solverous.com',
+    'https://solvecore.solverous.com',
+    'http://localhost:7000',
+  ].filter((o): o is string => Boolean(o)),
+);
+
+const allowLocalCorsOrigins =
+  !isProductionMode() ||
+  isLocalUrl(process.env.FRONTEND_URL) ||
+  isLocalUrl(process.env.BACKEND_URL);
+
+const isAllowedCorsOrigin = (origin: string): boolean => {
+  return (
+    allowedOrigins.has(origin) || (allowLocalCorsOrigins && isLocalUrl(origin))
+  );
+};
+
+const corsOrigin = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean | string) => void,
+) => {
+  if (!origin) {
+    callback(null, true);
+    return;
+  }
+
+  if (isAllowedCorsOrigin(origin)) {
+    callback(null, origin);
+    return;
+  }
+
+  callback(new Error(`CORS origin not allowed: ${origin}`), false);
+};
 
 async function bootstrap() {
   getRequiredEnv('DATABASE_URL');
@@ -56,7 +86,7 @@ async function bootstrap() {
   app.use(RequestLoggerMiddleware);
 
   app.enableCors({
-    origin: allowedOrigins,
+    origin: corsOrigin,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   });

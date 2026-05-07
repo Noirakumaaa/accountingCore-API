@@ -8,16 +8,73 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import type { Response } from 'express';
+import type { CookieOptions, Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RegisterDTO } from './dto/register.dto.js';
 import { LoginDTO } from './dto/login.dto.js';
-import { shouldUseSecureCookies } from '../config/runtime-env.js';
+import {
+  isLocalHostname,
+  shouldUseSecureCookies,
+} from '../config/runtime-env.js';
 
-const COOKIE_BASE = {
+const COOKIE_BASE: CookieOptions = {
   httpOnly: true,
   secure: shouldUseSecureCookies(),
   sameSite: 'lax' as const,
+};
+
+const getRequestHostname = (res: Response): string | undefined => {
+  const req = res.req;
+  const hostname = req?.hostname;
+  if (hostname) return hostname;
+
+  const host = req?.headers.host;
+  if (!host) return undefined;
+  if (host.startsWith('[')) return host.slice(1, host.indexOf(']'));
+  return host.split(':')[0];
+};
+
+const getRequestProtocol = (res: Response): string | undefined => {
+  const forwardedProto = res.req?.headers['x-forwarded-proto'];
+  if (typeof forwardedProto === 'string') {
+    return forwardedProto.split(',')[0]?.trim().toLowerCase();
+  }
+
+  return res.req?.protocol;
+};
+
+const getOriginHostname = (res: Response): string | undefined => {
+  const origin = res.req?.headers.origin;
+  if (!origin) return undefined;
+
+  try {
+    return new URL(origin).hostname;
+  } catch {
+    return undefined;
+  }
+};
+
+const getCookieOptions = (res: Response): CookieOptions => {
+  const hostname = getRequestHostname(res);
+  const protocol = getRequestProtocol(res);
+  const originHostname = getOriginHostname(res);
+  const isLocalHttp = isLocalHostname(hostname) && protocol !== 'https';
+  const isCrossOrigin =
+    Boolean(originHostname && hostname && originHostname !== hostname) &&
+    !(isLocalHostname(originHostname) && isLocalHostname(hostname));
+
+  if (isCrossOrigin) {
+    return {
+      ...COOKIE_BASE,
+      secure: true,
+      sameSite: 'none',
+    };
+  }
+
+  return {
+    ...COOKIE_BASE,
+    secure: isLocalHttp ? false : COOKIE_BASE.secure,
+  };
 };
 
 import { UserRole } from '@prisma/client';
@@ -210,8 +267,9 @@ export class AuthService {
     await this.prisma.session
       .delete({ where: { id: sessionId } })
       .catch(() => {});
-    res.clearCookie('access_token', COOKIE_BASE);
-    res.clearCookie('refresh_token', COOKIE_BASE);
+    const cookieOptions = getCookieOptions(res);
+    res.clearCookie('access_token', cookieOptions);
+    res.clearCookie('refresh_token', cookieOptions);
     return { message: 'Logged out' };
   }
 
@@ -325,12 +383,14 @@ export class AuthService {
       expiresIn: `${sessionSettings.refreshTokenDays}d`,
     });
 
+    const cookieOptions = getCookieOptions(res);
+
     res.cookie('access_token', accessToken, {
-      ...COOKIE_BASE,
+      ...cookieOptions,
       maxAge: sessionSettings.accessTokenMinutes * 60 * 1000,
     });
     res.cookie('refresh_token', refreshToken, {
-      ...COOKIE_BASE,
+      ...cookieOptions,
       maxAge: sessionSettings.refreshTokenDays * 24 * 60 * 60 * 1000,
     });
   }

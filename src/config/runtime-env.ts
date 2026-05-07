@@ -1,4 +1,9 @@
-const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+const LOCAL_HOSTNAMES = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+]);
 
 const parseBoolean = (value?: string): boolean | undefined => {
   if (!value) return undefined;
@@ -19,12 +24,17 @@ const parseBoolean = (value?: string): boolean | undefined => {
   }
 };
 
-const isLocalUrl = (value?: string): boolean => {
+export const isLocalHostname = (value?: string): boolean => {
+  if (!value?.trim()) return false;
+  return LOCAL_HOSTNAMES.has(value.trim().toLowerCase());
+};
+
+export const isLocalUrl = (value?: string): boolean => {
   if (!value?.trim()) return false;
 
   try {
     const url = new URL(value);
-    return LOCAL_HOSTNAMES.has(url.hostname);
+    return isLocalHostname(url.hostname);
   } catch {
     return false;
   }

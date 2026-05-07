@@ -11,6 +11,7 @@ import type { Response } from 'express';
 import * as bcrypt from 'bcrypt';
 
 jest.mock('../config/runtime-env', () => ({
+  isLocalHostname: jest.fn(() => false),
   shouldUseSecureCookies: jest.fn(() => false),
 }));
 
