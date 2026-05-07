@@ -12,10 +12,11 @@ import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RegisterDTO } from './dto/register.dto.js';
 import { LoginDTO } from './dto/login.dto.js';
+import { shouldUseSecureCookies } from '../config/runtime-env.js';
 
 const COOKIE_BASE = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: shouldUseSecureCookies(),
   sameSite: 'lax' as const,
 };
 

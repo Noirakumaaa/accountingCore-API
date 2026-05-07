@@ -5,10 +5,14 @@ import {
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
-import { AuthService } from './auth.service.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { AuthService } from './auth.service';
+import { PrismaService } from '../prisma/prisma.service';
 import type { Response } from 'express';
 import * as bcrypt from 'bcrypt';
+
+jest.mock('../config/runtime-env', () => ({
+  shouldUseSecureCookies: jest.fn(() => false),
+}));
 
 // ── mocks ──────────────────────────────────────────────────────────────────────
 

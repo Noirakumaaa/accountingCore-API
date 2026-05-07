@@ -6,6 +6,7 @@ import {
 import { ContactType, type Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateContactDto } from './dto/create-contact.dto.js';
+import { UpdateContactDto } from './dto/update-contact.dto.js';
 
 type ContactKind = 'all' | 'customer' | 'vendor';
 
@@ -43,6 +44,23 @@ export class ContactsService {
         phone: dto.phone?.trim() || null,
         taxId: dto.taxId?.trim() || null,
         isActive: dto.isActive ?? true,
+      },
+    });
+  }
+
+  async update(id: string, dto: UpdateContactDto) {
+    const contact = await this.prisma.contact.findUnique({ where: { id } });
+    if (!contact) throw new NotFoundException('Contact not found.');
+
+    return this.prisma.contact.update({
+      where: { id },
+      data: {
+        type: dto.type,
+        name: dto.name?.trim(),
+        email: dto.email !== undefined ? dto.email.trim() || null : undefined,
+        phone: dto.phone !== undefined ? dto.phone.trim() || null : undefined,
+        taxId: dto.taxId !== undefined ? dto.taxId.trim() || null : undefined,
+        isActive: dto.isActive,
       },
     });
   }

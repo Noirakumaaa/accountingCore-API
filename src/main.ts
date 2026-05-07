@@ -8,6 +8,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware.js';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import { isProductionMode } from './config/runtime-env.js';
 
 const getRequiredEnv = (name: string): string => {
   const value = process.env[name]?.trim();
@@ -63,7 +64,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (!isProductionMode()) {
     const config = new DocumentBuilder()
       .setTitle('SolveCore API')
       .setDescription('Payroll & HR management API')

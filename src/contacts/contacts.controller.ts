@@ -14,6 +14,7 @@ import { RolesGuard } from '../auth/guards/roles.guard.js';
 import { Roles } from '../auth/decorators/roles.decorator.js';
 import { ContactsService } from './contacts.service.js';
 import { CreateContactDto } from './dto/create-contact.dto.js';
+import { UpdateContactDto } from './dto/update-contact.dto.js';
 
 @Controller('contacts')
 @UseGuards(JwtAuthGuard)
@@ -28,6 +29,11 @@ export class ContactsController {
   @Post()
   create(@Body() dto: CreateContactDto) {
     return this.contactsService.create(dto);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateContactDto) {
+    return this.contactsService.update(id, dto);
   }
 
   @Patch(':id/deactivate')
